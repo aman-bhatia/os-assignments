@@ -63,6 +63,10 @@ QEMU := $(shell if which qemu > /dev/null; \
 	echo "***" 1>&2; exit 1)
 endif
 
+QEMUGDB = $(shell if $(QEMU) -nographic -help | grep -q '^-gdb'; \
+	then echo "-gdb tcp::$(GDBPORT)"; \
+	else echo "-s -p $(GDBPORT)"; fi)
+
 # try to generate a unique GDB port
 GDBPORT	:= $(shell expr `id -u` % 5000 + 25000)
 
@@ -82,8 +86,8 @@ PERL	:= perl
 
 # Compiler flags
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
-# Only optimize to -O0 to discourage inlining, which complicates backtraces.
-CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O0 -fno-builtin -I$(TOP) -MD
+# Only optimize to -O1 to discourage inlining, which complicates backtraces.
+CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
 CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -Wall -Wno-format -Wno-unused -Werror -gstabs -m32
 # -fno-tree-ch prevented gcc from sometimes reordering read_ebp() before
@@ -176,6 +180,8 @@ print-qemu:
 
 print-gdbport:
 	@echo $(GDBPORT)
+print-qemugdb:
+	@echo $(QEMUGDB)
 
 # For deleting the build
 clean:
@@ -194,11 +200,20 @@ ifneq ($(V),@)
 GRADEFLAGS += -v
 endif
 
-grade:
+
+grade: $(LABSETUP)grade-lab$(LAB).sh
 	@echo $(MAKE) clean
 	@$(MAKE) clean || \
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
-	./grade-lab$(LAB) $(GRADEFLAGS)
+	$(MAKE) all
+	sh $(LABSETUP)grade-lab$(LAB).sh
+
+
+#grade:
+#	@echo $(MAKE) clean
+#	@$(MAKE) clean || \
+#	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
+#	./grade-lab$(LAB) $(GRADEFLAGS)
 
 git-handin: handin-check
 	@if test -n "`git config remote.handin.url`"; then \
@@ -250,6 +265,8 @@ handin-check:
 
 tarball: handin-check
 	git archive --format=tar HEAD | gzip > lab$(LAB)-handin.tar.gz
+	base64 lab$(LAB)-handin.tar.gz > lab$(LAB)-handin.tar.gz.b64
+	rm -f lab$(LAB)-handin.tar.gz
 
 tarball-pref: handin-check
 	git archive --prefix=lab$(LAB)/ --format=tar HEAD | gzip > lab$(LAB)-handin.tar.gz
