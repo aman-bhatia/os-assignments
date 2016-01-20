@@ -67,27 +67,39 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
 
-	//int current_eip = dummy_function_for_current_eip();
+	int eip, ebp, arg1, arg2, arg3, arg4, arg5;
+	struct Eipdebuginfo info;
+
+	eip = dummy_function_for_current_eip();
 
 	cprintf("Stack backtrace:\n");
-	//cprintf("Stack backtrace:\n");
+	cprintf("    current eip=%08x\n",eip);
 
-	int ebp = read_ebp();
-	int saved_ebp = *(int*)ebp;
+	if( debuginfo_eip(eip,&info) == 0){
+		cprintf("    \t%s:%d: %.*s+%d\n",info.eip_file, info.eip_line, info.eip_fn_namelen, info.eip_fn_name, (eip-info.eip_fn_addr));
+	} else {
+		cprintf("Address passed to debuginfo_eip not found\n");
+	}
+
+	ebp = read_ebp();
 
 
 	while (ebp != 0){
-		int eip = *((int*)ebp + 1);
-		int arg1 = *((int*)ebp + 2);
-		int arg2 = *((int*)ebp + 3);
-		int arg3 = *((int*)ebp + 4);
-		int arg4 = *((int*)ebp + 5);
-		int arg5 = *((int*)ebp + 6);
+		eip  = *((int*)ebp + 1);
+		arg1 = *((int*)ebp + 2);
+		arg2 = *((int*)ebp + 3);
+		arg3 = *((int*)ebp + 4);
+		arg4 = *((int*)ebp + 5);
+		arg5 = *((int*)ebp + 6);
 
-		cprintf("    ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",ebp,eip,arg1,arg2,arg3,arg4,arg5);
+		cprintf("    ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",ebp, eip, arg1, arg2, arg3, arg4, arg5);
+		if( debuginfo_eip(eip,&info) == 0){
+			cprintf("    \t%s:%d: %.*s+%d\n",info.eip_file, info.eip_line, info.eip_fn_namelen, info.eip_fn_name, (eip-info.eip_fn_addr));
+		} else {
+			cprintf("Address passed to debuginfo_eip not found\n");
+		}
 
-		ebp = saved_ebp;
-		saved_ebp = *(int*)ebp;
+		ebp = *(int*)ebp;
 	}
 	
 	return 0;
