@@ -56,14 +56,25 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int dummy_function_for_current_eip(){
+	int ebp = read_ebp();
+	int eip = *((int*)ebp + 1);
+	return eip;
+}
+
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
 
+	//int current_eip = dummy_function_for_current_eip();
+
 	cprintf("Stack backtrace:\n");
+	//cprintf("Stack backtrace:\n");
+
 	int ebp = read_ebp();
 	int saved_ebp = *(int*)ebp;
+
 
 	while (ebp != 0){
 		int eip = *((int*)ebp + 1);
@@ -73,7 +84,7 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 		int arg4 = *((int*)ebp + 5);
 		int arg5 = *((int*)ebp + 6);
 
-		cprintf("ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",ebp,eip,arg1,arg2,arg3,arg4,arg5);
+		cprintf("    ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",ebp,eip,arg1,arg2,arg3,arg4,arg5);
 
 		ebp = saved_ebp;
 		saved_ebp = *(int*)ebp;
