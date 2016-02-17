@@ -104,8 +104,11 @@ boot_alloc(uint32_t n)
 	if (n>0){
 		uint32_t num_pages = ((uint32_t) n/PGSIZE) + 1;
 		if (n%PGSIZE == 0) num_pages--;
-		if (num_pages > npages)
+		
+		if ((uint32_t)nextfree + num_pages*PGSIZE > KERNBASE + npages*PGSIZE){
 			panic("kern/pmap.c - bootalloc() : Out of memory\n\n");
+		}
+		
 		nextfree += (num_pages*PGSIZE);
 	}
 
@@ -161,9 +164,6 @@ mem_init(void)
 	pages = (struct PageInfo *) boot_alloc(pages_array_size);
 	memset(pages,0,sizeof(pages));
 
-	// cprintf("pages address : %p\n", pages);
-	// cprintf("page_free_list address : %p\n", &page_free_list);
-
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -189,6 +189,14 @@ mem_init(void)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
 
+	uint32_t rounded_pages_array_size = ((pages_array_size/PGSIZE) + 1)*PGSIZE;
+	if (pages_array_size % PGSIZE == 0)
+		rounded_pages_array_size -= PGSIZE;
+	
+	// cprintf("rounded_pages_array_size : %d\n",rounded_pages_array_size);
+	boot_map_region(kern_pgdir, UPAGES , rounded_pages_array_size , PADDR(pages), PTE_U | PTE_P);
+
+
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
@@ -201,6 +209,8 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 
+	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE , KSTKSIZE , PADDR(bootstack), PTE_W | PTE_P);
+
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -209,6 +219,10 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+
+	uint32_t size = 0xffffffff - KERNBASE;
+	boot_map_region(kern_pgdir, KERNBASE , size , 0 , PTE_W | PTE_P);
+
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -440,8 +454,8 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 {
 	// Fill this function in
 
-	uintptr_t limit = va + size;
-	while (va < limit){
+	uint32_t limit = va + size - PGSIZE;
+	while (va <= limit){
 		
 		// get the mapping from the page directory
 		pte_t * pte = pgdir_walk(pgdir,(void *)va,true);
