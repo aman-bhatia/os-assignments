@@ -220,7 +220,7 @@ mem_init(void)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
 
-	uint32_t size = 0xffffffff - KERNBASE;
+	uint32_t size = 0xffffffff - KERNBASE + 1;
 	boot_map_region(kern_pgdir, KERNBASE , size , 0 , PTE_W | PTE_P);
 
 
@@ -429,7 +429,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 				return NULL;
 			} else {
 				page->pp_ref++;
-				*pde = (page2pa(page) | PTE_P);
+				*pde = (page2pa(page) | PTE_W | PTE_U | PTE_P);			// give all permissions to pde
 			}
 		}
 	}
@@ -454,9 +454,9 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 {
 	// Fill this function in
 
-	uint32_t limit = va + size - PGSIZE;
-	while (va <= limit){
-		
+	uint32_t sz;
+	for (sz=0; sz<size; sz += PGSIZE){
+
 		// get the mapping from the page directory
 		pte_t * pte = pgdir_walk(pgdir,(void *)va,true);
 		
@@ -522,7 +522,6 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 
 	*pte = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
 	uint32_t pdx = PDX(va);
-	pgdir[pdx] = pgdir[pdx] | perm;
 	return 0;
 }
 
