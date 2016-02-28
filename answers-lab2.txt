@@ -1,0 +1,95 @@
++===============+
+|	Answer(1)	|
++===============+
+
+The type of variable x should be 'uintptr_t'. In the code, we are dereferencing the variable 'value', so it must be a virtual address, and hence, variable x must be of type virtual address.
+
+
+
+
++===============+
+|	Answer(2)	|
++===============+
+
++--------+----------------------+---------------------------------------------------------------------------+
+| Entry  | Base Virtual Address | Points to (logically)                                      		 		|
++--------+----------------------+---------------------------------------------------------------------------+
+|  1023  | 		0xffc00000 		| Physical Address of Page table for top 4MB of physical memory         	|
+|  1022  | 		0xff800000 		| Physical Address of Page table for second top 4MB of physical memory     	|
+|   .	 |  	   .    		| .																			|
+|  960   | 		0xf0000000 		| Physical Address 0x0													 	|
+|  959   | 		0xefc00000 		| Physical Address of Page table for bootstack							 	|
+|   .    | 			.			| .															 				|
+|  956   | 		0xef000000 		| Mapping for 'pages' which is read only to user               				|
+|   .	 |  		.	    	| .                                                           				|
+|   2  	 | 		0x00800000 		| Not mapped                                                  				|
+|   1  	 | 		0x00400000 		| Not mapped                                                  				|
+|   0 	 | 		0x00000000 		| Not mapped                                                  				|
++--------+----------------------+---------------------------------------------------------------------------+
+
+
+
+
+
+
++===============+
+|	Answer(3)	|
++===============+
+
+The last 12 bits are resposible to store the permissions of the page directory or page table entry. If PTE_U bit is not set for a entry, then it cant be read by the user. The hardware uses CPL(Current Priviledge Level) to differentiate between kernel and user. CPL for kernel is 0  and for user is 3. If CPL is 3 and PTE_U is not set, then an access will create a page fault. Similarly, if CPL is 3 and PTE_W is not set, then a write to page will create a page fault.
+
+
+
+
+
+
++===============+
+|	Answer(4)	|
++===============+
+
+We have 32-bits, so memory addressable is 2^32 = 4GB. But KERNBASE is mapped to 0xf0000000, so kernel can only access addresses in range [0xf0000000, 0xffffffff) which is 256 MB. So, maximum physical memory supported by this operating system is 256 MB.
+
+
+
+
+
++===============+
+|	Answer(5)	|
++===============+
+
+Memory 										=	256 MB
+Page Size 									=	4 KB
+Number of pages = 256 MB / 4 KB 			=	64 K
+Size of struct PageInfo 					= 	8 B
+Memory for 'pages' array = 64 K * 8 B 		= 	512 KB
+Memory for mapping of all pages				= 	64 K * 4 B = 256 KB
+Memory for on page directory entry 			= 	4 B
+Total overhead								= 	772 KB
+
+
+
+
+
+
++===============+
+|	Answer(6)	|
++===============+
+
+- EIP is transitioned when we execute the instruction "jmp *%eax" as the value of *%eax is above KERNBASE
+- We have mapped [0,4MB) and [KERNBASE, KERNBASE + 4MB) virtual address to [0,4MB] physical address. This makes it possible to run at such low EIP.
+- We will be able to use the mapping from [KERNBASE,KERNBASE+4MB] virtual address to [0,4MB] physical address, only after we jump to a address above KERNBASE. So this transition is necessary.
+
+
+
+
+
+
++====================+
+|	KEY LEARNINGS	 |
++====================+
+
+(1) I got to understand the concept of transition between the code running in [0,4MB) to above KERNBASE as explained in answer 6.
+
+(2) The other thing which I appreciated a lot was the corner case in page insert. There was a bug in my implementation and finally I got it right by that corner case.
+
+(3) Also I did not know before doinf the assignment that kernel maintains a 'page_free_list' linked list. I came to know this fact while doing the assignment.
