@@ -26,6 +26,8 @@ static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "Backtraces the function call", mon_backtrace },
+	{ "si", "Single step execution", mon_si },
+	{ "c", "Continue Execution", mon_c },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -106,6 +108,17 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+// LAB 3 single step and continue functions //
+
+int mon_si(int argc, char **argv, struct Trapframe *tf){
+	tf->tf_eflags |= FL_TF;
+	return -1;
+}
+
+int mon_c(int argc, char **argv, struct Trapframe *tf){
+	tf->tf_eflags &= (~(FL_TF));
+	return -1;
+}
 
 
 /***** Kernel monitor command interpreter *****/
