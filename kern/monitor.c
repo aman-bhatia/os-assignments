@@ -25,6 +25,9 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Backtraces the function call", mon_backtrace },
+	{ "si", "Single step execution", mon_si },
+	{ "c", "Continue Execution", mon_c },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -56,13 +59,66 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int dummy_function_for_current_eip(){
+	int ebp = read_ebp();
+	int eip = *((int*)ebp + 1);
+	return eip;
+}
+
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+
+	int eip, ebp, arg1, arg2, arg3, arg4, arg5;
+	struct Eipdebuginfo info;
+
+	eip = dummy_function_for_current_eip();
+
+	cprintf("Stack backtrace:\n");
+	cprintf("    current eip=%08x\n",eip);
+
+	if( debuginfo_eip(eip,&info) == 0){
+		cprintf("    \t%s:%d: %.*s+%d\n",info.eip_file, info.eip_line, info.eip_fn_namelen, info.eip_fn_name, (eip-info.eip_fn_addr));
+	} else {
+		cprintf("Address passed to debuginfo_eip not found\n");
+	}
+
+	ebp = read_ebp();
+
+
+	while (ebp != 0){
+		eip  = *((int*)ebp + 1);
+		arg1 = *((int*)ebp + 2);
+		arg2 = *((int*)ebp + 3);
+		arg3 = *((int*)ebp + 4);
+		arg4 = *((int*)ebp + 5);
+		arg5 = *((int*)ebp + 6);
+
+		cprintf("    ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",ebp, eip, arg1, arg2, arg3, arg4, arg5);
+		if( debuginfo_eip(eip,&info) == 0){
+			cprintf("    \t%s:%d: %.*s+%d\n",info.eip_file, info.eip_line, info.eip_fn_namelen, info.eip_fn_name, (eip-info.eip_fn_addr));
+		} else {
+			cprintf("Address passed to debuginfo_eip not found\n");
+		}
+
+		ebp = *(int*)ebp;
+	}
+	
 	return 0;
 }
 
+// LAB 3 single step and continue functions //
+
+int mon_si(int argc, char **argv, struct Trapframe *tf){
+	tf->tf_eflags |= FL_TF;
+	return -1;
+}
+
+int mon_c(int argc, char **argv, struct Trapframe *tf){
+	tf->tf_eflags &= (~(FL_TF));
+	return -1;
+}
 
 
 /***** Kernel monitor command interpreter *****/

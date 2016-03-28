@@ -1,0 +1,62 @@
++===============+
+|	Answer(1)	|
++===============+
+
+We have error codes and that is why we want to treat separate exceptions separately. For example, for some exceptions we need to push the error code and for some, we do not need to push the error code. We have to deal these cases individually. Hence we have two fifferent trap handler macros. In case we have a common handler for all exceptions, then we have to do a little more work in the trapframe to decide whether to push the error or zero in the trapframe and hence it will be more complicated.
+
+
+
+
++===============+
+|	Answer(2)	|
++===============+
+
+NO, we do not have to do anything to make user/softint behave correctly. Whats happening here is that the user program is trying to call the page fault interupt($int 14) which it does not have the priviledges. So, instead the general protection fault is generated($int 13).
+
+If the kernel allows softint's int $14 instruction to invoke the kernel's page fault handler (which is
+interrupt vector 14), then the user program can actually allocate more memory to itself if we are using lazy page allocation in page fault handler.
+
+
+
+
++===============+
+|	Answer(3)	|
++===============+
+
+I set the breakpoint IDT entry to have DPL of 3, and so it generated a breakpoint exception. Instead, if I have kept DPL to be 0, then it will have generated a general protection fault.
+
+
+
+
+
++===============+
+|	Answer(4)	|
++===============+
+
+We do not want the user to have complete control of the hardware. That is why we want the user to have very restricted actions such as setting up a breakpoint. If user want to use the hardware, we want it to communicate it through the OS via system calls.
+
+user/softint actually showed a very important example in the support of above statement. If we have allowed the the user program to make $int 14(page fault), then user can play with the pages and allocate more memory to itself. This mechanism restrict such behavior.
+
+
+
+
+
++===============+
+|	Challenge	|
++===============+
+
+I coded the single step and continue challenge exercise. I came to know that if FL_TF(trap flag) in the eflags is set then processor automatically throws a debug interupt after each instruction. So, I implemented two functions in monitor.c, one mon_si() and one mon_c() for single step and continue respectively.
+
+In mon_si(), I set the above flag and in mon_c(), I reset the above flag. This way when user land in monitor after breakpoint and execute 'si', then the flag will get set, and the processor will trap in the next instruction. I then handled the trap in trap.c, and land the user again in monitor.
+
+
+
++====================+
+|	KEY LEARNINGS	 |
++====================+
+
+(1) I get the understanding of the various env fields specifically the load_icode function. I got insights how the binary is loaded and finally how environment got to run.
+
+(2) Also, I always wondered how we set CS and IP in IDT. By coding it in trapentry.S, I get to learn that in detail.
+
+(3) I get to learn the switching between the kernel and the user, i.e. pushing of the trapframe, iret, pop trapframe etc.
