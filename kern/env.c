@@ -569,6 +569,8 @@ env_run(struct Env *e)
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
 	lcr3(PADDR(curenv->env_pgdir));
+
+	unlock_kernel();
 	
 	struct Trapframe *temp_tf = &(curenv->env_tf);
 	env_pop_tf(temp_tf);

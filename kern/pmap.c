@@ -299,6 +299,10 @@ mem_init_mp(void)
 	//
 	// LAB 4: Your code here:
 
+	int i;
+	for (i=0;i<NCPU;i++){
+		boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE-(i*(KSTKSIZE+KSTKGAP)), KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W | PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -350,6 +354,11 @@ page_init(void)
 	size_t i;
 	pages[0].pp_ref = 1;
 	for (i = 1; i < npages_basemem; i++) {
+		// using cprintf I checked that PGNUM(MPENTRY_PADDR) is equal to 7, and s it is in this loop
+		if (i==PGNUM(MPENTRY_PADDR)){
+			pages[i].pp_ref = 1;
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
@@ -692,7 +701,22 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	// panic("mmio_map_region not implemented");
+
+	// round up the sizze to multiple of page size
+	size_t rounded_size = ROUNDUP(size,PGSIZE);
+
+	// check that it is within the limits
+	if (base + rounded_size > MMIOLIM){
+		panic("MMIOLIM exceeded!");
+	}
+
+	// map the region
+	boot_map_region(kern_pgdir,base,rounded_size,pa,PTE_PCD|PTE_PWT|PTE_W|PTE_P);
+
+	// return the base and increment base accordingly
+	base = base + rounded_size;
+	return (void *)(base - rounded_size);
 }
 
 static uintptr_t user_mem_check_addr;
