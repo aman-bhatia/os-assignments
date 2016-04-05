@@ -34,7 +34,7 @@ sched_yield(void)
 	if (thiscpu->cpu_env)
 		curenvid = ENVX(thiscpu->cpu_env->env_id);
 	else
-		curenvid = 0;
+		curenvid = -1;
 
 	int i,nextenvid;
 	for (i=1;i<=NENV;i++){

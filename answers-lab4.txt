@@ -1,0 +1,50 @@
++===============+
+|	Answer(1)	|
++===============+
+
+The code is loaded below at address MPENTRY_PADDR which is below KERNBASE but it is linked to run above KERNBASE. So we need a address translation for correct run of the code. This is what MPBOOTPHYS does. MPBOOTPHYS changes the virtual address we have to physical address. That is it places the address at appropriate offset from MPENTRY_PADDR.
+
+We do not need this in boot.S because the code is at page 0 and is linked at page KERNBASE but both these addresses are mapped to the same page. This is not the case in mpentry.S. If the above mechanism is omitted then the kernel will be looking at somewhere else for the code and unknown results can take place.
+
+
+
+
++===============+
+|	Answer(2)	|
++===============+
+
+We need separate kernel stacks for each CPU. The reason being that the kernel lock only ensures that only one CPU can run the kernel code at a time, but does not put any condition on accessing the stack. Example suppose a process has acquired the lock and pushed trap frame onto it, and then yielded. Now some other process can acquire the lock and push its trap frame. So, when the again acquire the lock and after its processing tries to pop the trap frame, it may not get the trap frame it has pushed. Hence we need separate stacks.
+
+
+
+
++===============+
+|	Answer(3)	|
++===============+
+
+However, I do not dereference 'e' after loading cr3, but in any case that will also work. The reason is that 'e' is a pointer allocated on the kernel stack. In every environment, the address space above UTOP is mapped to the same physical address space. And 'e' being in that address space, it can be dereferenced both before and after the loading of cr3 register.
+
+
+
+
++===============+
+|	Answer(4)	|
++===============+
+
+We want the process to continue its execution when it gets scheduled again. So, it is necessary for the kernel to save the process's registers so as to make sure that it continues its executions from where it was interrupted without any errors.
+
+This happens in the construction of the trap frame, when we switch from user mode to kernel mode.
+
+
+
+
+
++====================+
+|	KEY LEARNINGS	 |
++====================+
+
+(1) The section on page fault handler in user mode. The technicalities that how we assign an exception stack and UTrapframe etc was really something good to learn.
+
+(2) I got stuck in the testing part after exercise 11. I even posted it on piazza. Then by high level debugging, I found that there was an error in user_mem_check function. What I had done was that I checked for an address being NULL later and first dereferenced it. So, I was getting page fault in kernel mode. That 1-2 day of debugging gave me real insights on how to proceed step wise step to debug a code.
+
+(3) In exercise 13 also, I was not getting the desired output. That is my code was just spinning even after the implementation. Then finally I debugged it and found that at the time of loading the binary from elfhdr, instead of doing the OR of the flags, I directly assigned them. I realized that how such a small bug can give control of your system to a unreliable process.
