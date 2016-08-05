@@ -278,6 +278,15 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	// Also clear the IPC receiving flag.
 	e->env_ipc_recving = 0;
 
+	//for strace
+	e->env_being_traced = 0;
+
+	// for ptrace
+	e->env_ptrace_attached = 0;
+
+	// for oprof
+	e->env_being_oprofed = 0;
+
 	// commit the allocation
 	env_free_list = e->env_link;
 	*newenv_store = e;
@@ -345,7 +354,7 @@ region_alloc(struct Env *e, void *va, size_t len)
 // load_icode panics if it encounters problems.
 //  - How might load_icode fail?  What might be wrong with the given input?
 //
-static void
+void
 load_icode(struct Env *e, uint8_t *binary)
 {
 	// Hints:
@@ -410,6 +419,47 @@ load_icode(struct Env *e, uint8_t *binary)
 	region_alloc(e, (void *) (USTACKTOP - PGSIZE), PGSIZE);
 
 	lcr3(PADDR(kern_pgdir));
+}
+
+
+//this change has been done after mush degugging
+//it load_icode modifies the data section while loading the elf binay
+//also in the end the stack is also overwritten
+//so we comment out the stack overwriting code line
+//also switching b/w kernel stack and user stack is also prevented as it is redundant
+void my_load_icode(struct Env *e, uint8_t *binary)
+{
+	struct Elf * elfhdr = (struct Elf *)binary;
+
+	// is this a valid ELF?
+	if (elfhdr->e_magic != ELF_MAGIC)
+		panic("env.c/load_icode() : ELF not valid");
+
+	// set eip and eflags appropriately
+	e->env_tf.tf_eip = elfhdr->e_entry;
+	e->env_tf.tf_eflags |= elfhdr->e_flags;
+
+	// load the environment page directory so that we can copy and move data
+	// lcr3(PADDR(e->env_pgdir));
+
+	struct Proghdr *ph, *eph;
+	ph = (struct Proghdr *) (binary + elfhdr->e_phoff);
+	eph = ph + elfhdr->e_phnum;
+	for (; ph < eph; ph++){
+		if (ph->p_type == ELF_PROG_LOAD){
+			assert (ph->p_filesz <= ph->p_memsz);
+
+			region_alloc(e, (void *) ph->p_va, ph->p_memsz);
+			memmove((void *) ph->p_va, binary + ph->p_offset, ph->p_filesz);
+			memset((void *) (ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+		}
+	}
+
+	// Now map one page for the program's initial stack
+	// at virtual address USTACKTOP - PGSIZE.
+
+	// region_alloc(e, (void *) (USTACKTOP - PGSIZE), PGSIZE);
+	// lcr3(PADDR(kern_pgdir));
 }
 
 //
@@ -493,6 +543,10 @@ env_free(struct Env *e)
 void
 env_destroy(struct Env *e)
 {
+	envid_t parent_eid = e->env_parent_id;
+	if (envs[ENVX(parent_eid)].env_status == ENV_NOT_RUNNABLE)
+		envs[ENVX(parent_eid)].env_status = ENV_RUNNABLE;
+
 	// If e is currently running on other CPUs, we change its state to
 	// ENV_DYING. A zombie environment will be freed the next time
 	// it traps to the kernel.

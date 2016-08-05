@@ -17,6 +17,8 @@
 #include <inc/memlayout.h>
 #include <inc/syscall.h>
 #include <inc/trap.h>
+#include <inc/date.h>
+
 
 #define USED(x)		(void)(x)
 
@@ -53,6 +55,21 @@ int	sys_page_map(envid_t src_env, void *src_pg,
 int	sys_page_unmap(envid_t env, void *pg);
 int	sys_ipc_try_send(envid_t to_env, uint32_t value, void *pg, int perm);
 int	sys_ipc_recv(void *rcv_pg);
+int sys_exec(char *func,char **argv);
+void sys_wait();
+int sys_date(struct rtcdate* rd);
+int	sys_kill(envid_t);
+void sys_trace_me();
+void sys_oprof_me();
+int sys_trace(envid_t child_envid);
+void sys_get_child_tf(envid_t child_envid,struct Trapframe *tf);
+void sys_ptrace_attach();
+int sys_ptrace_peek(envid_t child_envid, void * instr_addr, void * data);
+int sys_ptrace_poke(envid_t child_envid, void * instr_addr, void * data);
+int sys_ptrace_set_debug_flag(envid_t child_envid,int flag);
+int sys_ptrace_set_eip(envid_t child_envid,void* instr_ptr);
+
+
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t __attribute__((always_inline))

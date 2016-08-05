@@ -6,6 +6,7 @@
 #include <inc/memlayout.h>
 #include <inc/mmu.h>
 #include <inc/env.h>
+#include <inc/date.h>
 
 // Maximum number of CPUs
 #define NCPU  8
@@ -42,5 +43,6 @@ void lapic_init(void);
 void lapic_startap(uint8_t apicid, uint32_t addr);
 void lapic_eoi(void);
 void lapic_ipi(int vector);
+void cmostime(struct rtcdate* rd);
 
 #endif

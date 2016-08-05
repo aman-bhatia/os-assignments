@@ -264,12 +264,34 @@ trap_dispatch(struct Trapframe *tf)
 		page_fault_handler(tf);
 		return;
 	} else if (tf->tf_trapno == T_BRKPT){
-		monitor(tf);
-		return;
+		if (curenv->env_ptrace_attached==1){
+			curenv->env_status = ENV_NOT_RUNNABLE;
+			sched_yield();
+		} else {
+			monitor(tf);
+			return;
+		}
 	} else if (tf->tf_trapno == T_DEBUG){
-		monitor(tf);
-		return;
+		if (curenv->env_ptrace_attached==1){
+			curenv->env_status = ENV_NOT_RUNNABLE;
+			sched_yield();
+		} else {
+			monitor(tf);
+			return;	
+		}
 	} else if (tf->tf_trapno == T_SYSCALL){
+
+		uint32_t syscallno = tf->tf_regs.reg_eax;
+		
+		struct Env *parentEnv;
+		if(curenv->env_being_traced==1) {
+			int r;
+			if ((r = envid2env(curenv->env_parent_id, &parentEnv, 0)) != 0){
+				panic("Error in getting parent env id in syscall in trap trap_dispatch : %e",r);
+			}
+			parentEnv->env_tf.tf_regs.reg_eax = syscallno;
+		}
+
 		int arg1 = tf->tf_regs.reg_eax;
 		int arg2 = tf->tf_regs.reg_edx;
 		int arg3 = tf->tf_regs.reg_ecx;
@@ -278,6 +300,12 @@ trap_dispatch(struct Trapframe *tf)
 		int arg6 = tf->tf_regs.reg_esi;
 		
 		tf->tf_regs.reg_eax = syscall(arg1,arg2,arg3,arg4,arg5,arg6);
+
+		if(curenv->env_being_traced==1){
+			parentEnv->env_status = ENV_RUNNABLE;
+			curenv->env_status = ENV_NOT_RUNNABLE;
+			sched_yield();
+		}
 		return;
 	}
 
@@ -297,6 +325,11 @@ trap_dispatch(struct Trapframe *tf)
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
 		lapic_eoi();
 		sched_yield();
+		return;
+	}
+
+	if (tf->tf_trapno == IRQ_OFFSET + 1){
+		kbd_intr();
 		return;
 	}
 
@@ -384,6 +417,7 @@ page_fault_handler(struct Trapframe *tf)
 	// LAB 3: Your code here.
 
 	if ((tf->tf_cs & 3) == 0){
+		print_trapframe(tf);
 		panic("Page Fault in Kernel Mode");
 		return;
 	}

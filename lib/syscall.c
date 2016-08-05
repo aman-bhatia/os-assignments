@@ -111,3 +111,75 @@ sys_ipc_recv(void *dstva)
 	return syscall(SYS_ipc_recv, 1, (uint32_t)dstva, 0, 0, 0, 0);
 }
 
+int
+sys_exec(char *func,char **argv)
+{
+	return syscall(SYS_exec,0,(uint32_t)func,(uint32_t)argv,0,0,0);
+}
+
+void
+sys_wait(void)
+{
+	syscall(SYS_wait,0,0,0,0,0,0);
+}
+
+int sys_date(struct rtcdate* rd)
+{
+	return syscall(SYS_date,0,(uint32_t)rd,0,0,0,0);
+}
+
+int
+sys_kill(envid_t envid)
+{
+	return syscall(SYS_kill, 0, (uint32_t)envid, 0, 0, 0, 0);
+}
+
+void
+sys_trace_me(void)
+{
+	syscall(SYS_trace_me, 0, 0, 0, 0, 0, 0);
+}
+
+void
+sys_oprof_me(void)
+{
+	syscall(SYS_oprof_me, 0, 0, 0, 0, 0, 0);
+}
+
+int 
+sys_trace(envid_t child_envid)
+{
+	return syscall(SYS_trace,0,(uint32_t)child_envid,0,0,0,0);
+}
+
+void
+sys_get_child_tf(envid_t child_envid, struct Trapframe *tf)
+{
+	syscall(SYS_get_child_tf,0,(uint32_t)child_envid,(uint32_t)tf,0,0,0);
+}
+
+void
+sys_ptrace_attach()
+{
+	syscall(SYS_ptrace_attach,0,0,0,0,0,0);
+}
+
+int
+sys_ptrace_peek(envid_t child_envid, void * instr_addr, void * data){
+	return syscall(SYS_ptrace_peek,0,(uint32_t)child_envid, (uint32_t)instr_addr, (uint32_t)data,0,0);
+}
+
+int
+sys_ptrace_poke(envid_t child_envid, void * instr_addr, void * data){
+	return syscall(SYS_ptrace_poke,0,(uint32_t)child_envid, (uint32_t)instr_addr, (uint32_t)data,0,0);
+}
+
+int
+sys_ptrace_set_debug_flag(envid_t child_envid,int flag){
+	return syscall(SYS_ptrace_set_debug_flag,0,(uint32_t)child_envid,(uint32_t)flag,0,0,0);
+}
+
+int
+sys_ptrace_set_eip(envid_t child_envid,void* instr_ptr){
+	return syscall(SYS_ptrace_set_eip,0,(uint32_t)child_envid,(uint32_t)instr_ptr,0,0,0);
+}

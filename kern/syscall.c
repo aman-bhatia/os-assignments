@@ -12,6 +12,7 @@
 #include <kern/console.h>
 #include <kern/sched.h>
 
+
 // Print a string to the system console.
 // The string is exactly 'len' characters long.
 // Destroys the environment on memory errors.
@@ -56,9 +57,19 @@ sys_env_destroy(envid_t envid)
 
 	if ((r = envid2env(envid, &e, 1)) < 0)
 		return r;
-	if (e == curenv)
+	if (e == curenv){
 		cprintf("[%08x] exiting gracefully\n", curenv->env_id);
-	else
+		if(curenv->env_being_oprofed==1) {
+			struct Env *parentEnv;
+			int r;
+			if ((r = envid2env(curenv->env_parent_id, &parentEnv, 0)) != 0){
+				panic("Error in getting parent env id in syscall in trap trap_dispatch : %e",r);
+			}
+			parentEnv->env_tf.tf_regs.reg_eax = SYS_env_destroy;
+			parentEnv->env_status = ENV_RUNNABLE;
+			curenv->env_status = ENV_NOT_RUNNABLE;
+		}
+	} else
 		cprintf("[%08x] destroying %08x\n", curenv->env_id, e->env_id);
 	env_destroy(e);
 	return 0;
@@ -70,6 +81,15 @@ sys_yield(void)
 {
 	sched_yield();
 }
+
+// this new process to make the parrent not runnable so that the child can work in foreground
+//in env_destroy make suitable change to make parent runnable again.
+
+static void sys_wait(void)
+{
+	curenv->env_status = ENV_NOT_RUNNABLE;
+}
+
 
 // Allocate a new environment.
 // Returns envid of new environment, or < 0 on error.  Errors are:
@@ -407,6 +427,269 @@ sys_ipc_recv(void *dstva)
 	return 0;
 }
 
+// system call to obtain the date. Most of the changes done to implement this are done in
+// lapic.c and date.h. Also, to impelent the lapic.c we implemented most part by taking inspiration
+// from lapic.c of xv6 code. 
+static int
+sys_date(struct rtcdate* rd)
+{
+	cmostime(rd);
+	return 0;
+}
+
+// had to make this new function after much debugging because there was error in envid2env 
+// with 1 as argument.
+// with 1 as argument only parent can destroy child, but with 0 any process can kill
+static int
+sys_kill(envid_t envid)
+{
+	int r;
+	struct Env *e;
+
+	if ((r = envid2env(envid, &e, 0)) < 0)
+		return r;
+	if (e == curenv)
+		cprintf("[%08x] exiting gracefully\n", curenv->env_id);
+	else
+		cprintf("[%08x] destroying %08x\n", curenv->env_id, e->env_id);
+	env_destroy(e);
+	return 0;
+}
+
+static int
+sys_trace(envid_t child_envid)
+{
+	int r;
+	struct Env *childEnv;
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error im sys_trace() : %e",r);
+	}
+
+	childEnv->env_status = ENV_RUNNABLE;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	env_run(childEnv);
+	sched_yield();	
+}
+
+static void
+sys_trace_me()
+{
+	curenv->env_being_traced = 1;
+	int r;
+	struct Env *parentEnv;
+
+	if ((r = envid2env(curenv->env_parent_id, &parentEnv, 0)) != 0){
+		panic("Error in sys_trace_me() : %e",r);
+	}
+
+	parentEnv->env_status = ENV_RUNNABLE;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sched_yield();
+}
+
+static void 
+sys_oprof_me()
+{
+	curenv->env_being_oprofed = 1;
+	int r;
+	struct Env *parentEnv;
+
+	if ((r = envid2env(curenv->env_parent_id, &parentEnv, 0)) != 0){
+		panic("Error in sys_oprof_me() : %e",r);
+	}
+
+	parentEnv->env_status = ENV_RUNNABLE;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sched_yield();
+}
+
+static void
+sys_get_child_tf(envid_t child_envid,struct Trapframe * tf)
+{
+	int r;
+	struct Env *childEnv;
+
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error in sys_get_child_tf() : %e",r);
+
+	}
+	memcpy((void*)tf, (void*)(&(childEnv->env_tf)),sizeof(struct Trapframe)) ;
+	return;
+}
+
+static void
+sys_ptrace_attach()
+{
+	curenv->env_ptrace_attached = 1;
+}
+
+static int
+sys_ptrace_peek(envid_t child_envid, void * instr_addr, void * data){
+
+	int r;
+	struct Env *childEnv;
+
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error in sys_ptrace_peek() : %e",r);
+	}
+
+	lcr3(PADDR(childEnv->env_pgdir));
+	int temp = *(int*)instr_addr;
+	lcr3(PADDR(curenv->env_pgdir));
+	*(int*)data = temp;
+
+	return 0;
+}
+
+static int
+sys_ptrace_poke(envid_t child_envid, void * instr_addr, void * data){
+
+	int r;
+	struct Env *childEnv;
+
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error in sys_ptrace_peek() : %e",r);
+	}
+
+	int temp = *(int*)data;
+	lcr3(PADDR(childEnv->env_pgdir));
+	*(int*)instr_addr = temp;
+	lcr3(PADDR(curenv->env_pgdir));
+
+	return 0;
+}
+
+static int
+sys_ptrace_set_debug_flag(envid_t child_envid,int flag){
+
+	int r;
+	struct Env *childEnv;
+
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error in sys_ptrace_peek() : %e",r);
+	}
+
+	if(flag==1)
+		childEnv->env_tf.tf_eflags |= FL_TF;
+	else if (flag==0)
+		childEnv->env_tf.tf_eflags &= (~(FL_TF));
+	else
+		panic("sys_ptrace_set_debug_flag only take flag as either 0 or 1");
+	
+	return 0;
+}
+
+static int
+sys_ptrace_set_eip(envid_t child_envid,void* instr_ptr){
+	int r;
+	struct Env *childEnv;
+
+	if ((r = envid2env(child_envid, &childEnv, 0)) != 0){
+		panic("Error in sys_ptrace_peek() : %e",r);
+	}
+	childEnv->env_tf.tf_eip = (uintptr_t)instr_ptr;
+	return 0;
+}
+
+//function sys_exec for the shell
+static int sys_exec(char *func,char **argv)
+{
+	#define MAXARG 11
+	#define ENV_PASTE3(x, y, z) x ## y ## z
+	uint8_t *binary;
+
+	//define binaries for different cases
+	if(strcmp(func,"fact") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_fact, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_fact, _start);	
+	} else if(strcmp(func,"fib") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_fib, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_fib, _start);	
+	} else if(strcmp(func,"echo") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_echo, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_echo, _start);	
+	} else if (strcmp(func,"date") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_date, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_date, _start);
+	} else if (strcmp(func,"kill") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_kill, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_kill, _start);
+	} else if (strcmp(func,"help") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_help, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_help, _start);
+	} else if (strcmp(func,"strace") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_strace, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_strace, _start);
+	} else if (strcmp(func,"attach") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_ptrace, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_ptrace, _start);
+	} else if (strcmp(func,"oprof") == 0) {
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_oprof, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_oprof, _start);
+	}else {
+		cprintf("\nCommand %s does not exist! Refer to following help section...\n\n",func);
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_help, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_help, _start);
+	}
+	/*else if (strcmp(argv[1],"hello")==0 && strcmp(func,"attach")==0) {
+		// cprintf("came into this \n");
+		extern uint8_t ENV_PASTE3(_binary_obj_, user_hello, _start)[];
+		binary=ENV_PASTE3(_binary_obj_, user_hello, _start);
+	}
+	*/
+
+	//in load icode we loaded the kernel's page directory, so put back the user page directory
+	//need to keep a seperate temporay stack to keep the pointers to the arguments pushed onto
+	//the stack
+	uint32_t argc;
+	uint32_t sp = USTACKTOP;
+	uint32_t ustack[2+MAXARG+1];
+
+	//iterate till there are some arguments on the stack
+	for(argc = 0; argv[argc]; argc++) {
+		if(argc >= MAXARG) {
+		  cprintf("argc and len of argv don't match\n");
+		  return -1;
+		}
+		sp = (sp - (strlen(argv[argc]) + 1)) & ~3;
+		memcpy((void *)sp, (void *)argv[argc], strlen(argv[argc]) + 1);
+		ustack[2+argc] = sp;
+	}
+
+	//make the cell on the top of the pushed arguments as null
+	ustack[2+argc] = 0;
+
+	//push the argc and pointer to argv
+	ustack[0] = argc;
+	ustack[1] = sp - (argc+1)*4;  // argv pointer
+	
+	//now simply copy the temporary stack to the stack of the process
+	sp -= (2+argc+1)*4;
+	memcpy((void *)sp, (void *)ustack, (2+argc+1)*4);
+	curenv->env_tf.tf_esp = sp;
+	
+	//load the binary to the process
+	my_load_icode(curenv,binary);
+	// lcr3(PADDR(curenv->env_pgdir));
+
+	// for ptrace
+	if (curenv->env_ptrace_attached != 1){
+		env_run(curenv);
+	} else{
+		int r;
+		struct Env *parentEnv;
+		if ((r = envid2env(curenv->env_parent_id, &parentEnv, 0)) != 0){
+			panic("Error in sys_exec() : %e",r);
+		}
+		curenv->env_status = ENV_NOT_RUNNABLE;
+		parentEnv->env_status = ENV_RUNNABLE;
+		sched_yield();
+	}
+
+	return 0;
+}
+
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -446,6 +729,37 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			return sys_ipc_try_send(a1, a2, (void *) a3, a4);
 		case (SYS_ipc_recv):
 			return sys_ipc_recv((void *) a1);
+		case (SYS_exec):
+			return sys_exec((char *)a1,(char **)a2);
+		case (SYS_date):
+			return sys_date((struct rtcdate*)a1);
+		case(SYS_wait):
+			sys_wait();
+			return 0;
+		case(SYS_kill):
+			return sys_kill((envid_t)a1);
+		case(SYS_trace_me):
+			sys_trace_me();
+			return 0;
+		case(SYS_oprof_me):
+			sys_oprof_me();
+			return 0;
+		case(SYS_trace):
+			return sys_trace((envid_t)a1);
+		case(SYS_get_child_tf):
+			sys_get_child_tf((envid_t)a1,(struct Trapframe *)a2);
+			return 0;
+		case(SYS_ptrace_attach):
+			sys_ptrace_attach();
+			return 0;
+		case(SYS_ptrace_peek):
+			return sys_ptrace_peek((envid_t)a1,(void*)a2,(void*)a3);
+		case(SYS_ptrace_poke):
+			return sys_ptrace_poke((envid_t)a1,(void*)a2,(void*)a3);
+		case(SYS_ptrace_set_debug_flag):
+			return sys_ptrace_set_debug_flag((envid_t)a1,(int)a2);
+		case (SYS_ptrace_set_eip):
+			return sys_ptrace_set_eip((envid_t)a1,(void*)a2);
 		default:
 			return -E_INVAL;
 	}

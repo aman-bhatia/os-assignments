@@ -16,6 +16,19 @@ enum {
 	SYS_yield,
 	SYS_ipc_try_send,
 	SYS_ipc_recv,
+	SYS_exec,
+	SYS_wait,
+	SYS_date,
+	SYS_kill,
+	SYS_trace_me,
+	SYS_trace,
+	SYS_get_child_tf,
+	SYS_ptrace_attach,
+	SYS_ptrace_peek,
+	SYS_ptrace_poke,
+	SYS_ptrace_set_debug_flag,
+	SYS_ptrace_set_eip,
+	SYS_oprof_me,
 	NSYSCALLS
 };
 
